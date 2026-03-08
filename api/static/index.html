@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docling 文档转换服务</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .upload-section {
+            padding: 40px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .upload-area {
+            border: 3px dashed #dee2e6;
+            border-radius: 12px;
+            padding: 60px 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: white;
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .upload-area.dragover {
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .upload-area h3 {
+            color: #495057;
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+
+        .upload-area p {
+            color: #6c757d;
+            font-size: 0.95rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-info {
+            margin-top: 20px;
+            padding: 15px 20px;
+            background: #e8f4fd;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-info .file-name {
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        .file-info .file-size {
+            color: #5f6368;
+            font-size: 0.9rem;
+        }
+
+        .file-info .remove-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 5px;
+        }
+
+        .options {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .option-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .option-item label {
+            color: #495057;
+            cursor: pointer;
+        }
+
+        .result-section {
+            padding: 40px;
+            display: none;
+        }
+
+        .result-section.show {
+            display: block;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .result-header h3 {
+            color: #212529;
+            font-size: 1.3rem;
+        }
+
+        .result-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-btn {
+            padding: 8px 20px;
+            border: 2px solid #dee2e6;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .result-content {
+            background: #1e1e1e;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .result-toolbar {
+            background: #2d2d2d;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .result-toolbar span {
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
+
+        .copy-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #2563eb;
+        }
+
+        .result-output {
+            padding: 20px;
+            max-height: 500px;
+            overflow: auto;
+        }
+
+        .result-output pre {
+            color: #d4d4d4;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 0;
+        }
+
+        .markdown-output {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            max-height: 500px;
+            overflow: auto;
+            display: none;
+        }
+
+        .markdown-output.show {
+            display: block;
+        }
+
+        .markdown-output h1, .markdown-output h2, .markdown-output h3 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: #212529;
+        }
+
+        .markdown-output p {
+            margin-bottom: 1em;
+            line-height: 1.7;
+            color: #495057;
+        }
+
+        .markdown-output ul, .markdown-output ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+
+        .markdown-output code {
+            background: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .markdown-output pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading p {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .formats-info {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .formats-info h4 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+
+        .format-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .format-tag {
+            background: white;
+            border: 1px solid #dee2e6;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: #495057;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            opacity: 0.8;
+        }
+
+        footer a {
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+
+            .upload-section, .result-section {
+                padding: 20px;
+            }
+
+            .upload-area {
+                padding: 40px 20px;
+            }
+
+            .result-header {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Docling 文档转换服务</h1>
+            <p>支持 PDF、Word、PowerPoint、Excel、HTML、图片等多种格式转换为结构化 JSON</p>
+        </header>
+
+        <div class="main-card">
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📄</div>
+                    <h3>拖拽文件到此处，或点击选择文件</h3>
+                    <p>支持 PDF、DOCX、PPTX、XLSX、HTML、MD、CSV、PNG、JPG 等格式</p>
+                    <input type="file" class="file-input" id="fileInput" 
+                           accept=".pdf,.docx,.doc,.pptx,.xlsx,.html,.htm,.md,.csv,.png,.jpg,.jpeg,.tiff,.tif,.bmp,.webp">
+                </div>
+
+                <div class="file-info" id="fileInfo">
+                    <div>
+                        <span class="file-name" id="fileName"></span>
+                        <span class="file-size" id="fileSize"></span>
+                    </div>
+                    <button class="remove-btn" id="removeFile" title="移除文件">✕</button>
+                </div>
+
+                <div class="options">
+                    <div class="option-item">
+                        <input type="checkbox" id="exportMarkdown">
+                        <label for="exportMarkdown">同时导出 Markdown</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="checkbox" id="downloadFile" checked>
+                        <label for="downloadFile">直接下载 JSON 文件</label>
+                    </div>
+                </div>
+
+                <div style="text-align: center;">
+                    <button class="btn btn-primary" id="convertBtn" disabled>开始转换</button>
+                </div>
+
+                <div class="error-message" id="errorMessage"></div>
+
+                <div class="formats-info">
+                    <h4>支持的文件格式：</h4>
+                    <div class="format-tags">
+                        <span class="format-tag">PDF</span>
+                        <span class="format-tag">DOCX</span>
+                        <span class="format-tag">PPTX</span>
+                        <span class="format-tag">XLSX</span>
+                        <span class="format-tag">HTML</span>
+                        <span class="format-tag">Markdown</span>
+                        <span class="format-tag">CSV</span>
+                        <span class="format-tag">PNG</span>
+                        <span class="format-tag">JPG</span>
+                        <span class="format-tag">TIFF</span>
+                        <span class="format-tag">WebP</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>正在转换文档，请稍候...</p>
+            </div>
+
+            <div class="result-section" id="resultSection">
+                <div class="result-header">
+                    <h3>转换结果</h3>
+                    <div class="result-tabs">
+                        <button class="tab-btn active" data-tab="json">JSON</button>
+                        <button class="tab-btn" data-tab="markdown" id="markdownTab" style="display: none;">Markdown</button>
+                    </div>
+                </div>
+
+                <div id="jsonResult">
+                    <div class="result-content">
+                        <div class="result-toolbar">
+                            <span>application/json</span>
+                            <div>
+                                <button class="copy-btn" id="downloadJsonBtn" style="margin-right: 8px;">下载 JSON</button>
+                                <button class="copy-btn" id="copyJson">复制 JSON</button>
+                            </div>
+                        </div>
+                        <div class="result-output">
+                            <pre id="jsonOutput"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="markdown-output" id="markdownResult">
+                    <div id="markdownOutput"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Powered by <a href="https://github.com/docling-project/docling" target="_blank">Docling</a> | 
+               <a href="/docs" target="_blank">API 文档</a></p>
+        </footer>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const removeFile = document.getElementById('removeFile');
+        const convertBtn = document.getElementById('convertBtn');
+        const exportMarkdown = document.getElementById('exportMarkdown');
+        const downloadFile = document.getElementById('downloadFile');
+        const loading = document.getElementById('loading');
+        const resultSection = document.getElementById('resultSection');
+        const jsonOutput = document.getElementById('jsonOutput');
+        const markdownOutput = document.getElementById('markdownOutput');
+        const markdownTab = document.getElementById('markdownTab');
+        const errorMessage = document.getElementById('errorMessage');
+        const copyJson = document.getElementById('copyJson');
+        const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+
+        let selectedFile = null;
+        let currentResult = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        removeFile.addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.classList.remove('show');
+            convertBtn.disabled = true;
+            hideError();
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileInfo.classList.add('show');
+            convertBtn.disabled = false;
+            hideError();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        convertBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            hideError();
+            loading.classList.add('show');
+            resultSection.classList.remove('show');
+            convertBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const includeMarkdown = exportMarkdown.checked;
+            const wantDownload = downloadFile.checked;
+            const url = `/api/convert?export_markdown=${includeMarkdown}&download=${wantDownload}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (wantDownload) {
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || '转换失败');
+                    }
+                    const blob = await response.blob();
+                    const jsonFilename = selectedFile.name.replace(/\.[^/.]+$/, '') + '.json';
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = jsonFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    a.remove();
+                    showSuccess('JSON 文件已下载: ' + jsonFilename);
+                } else {
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.detail || '转换失败');
+                    }
+
+                    currentResult = data;
+                    displayResult(data);
+                }
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                loading.classList.remove('show');
+                convertBtn.disabled = false;
+            }
+        });
+
+        function displayResult(data) {
+            const jsonStr = JSON.stringify(data.document, null, 2);
+            jsonOutput.textContent = jsonStr;
+
+            if (data.markdown) {
+                markdownTab.style.display = 'inline-block';
+                markdownOutput.innerHTML = renderMarkdown(data.markdown);
+            } else {
+                markdownTab.style.display = 'none';
+            }
+
+            resultSection.classList.add('show');
+            document.getElementById('jsonResult').style.display = 'block';
+            document.getElementById('markdownResult').classList.remove('show');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector('[data-tab="json"]').classList.add('active');
+        }
+
+        function renderMarkdown(md) {
+            let html = md
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                .replace(/`([^`]+)`/gim, '<code>$1</code>')
+                .replace(/\n/gim, '<br>');
+            return html;
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                const tab = btn.dataset.tab;
+                if (tab === 'json') {
+                    document.getElementById('jsonResult').style.display = 'block';
+                    document.getElementById('markdownResult').classList.remove('show');
+                } else {
+                    document.getElementById('jsonResult').style.display = 'none';
+                    document.getElementById('markdownResult').classList.add('show');
+                }
+            });
+        });
+
+        copyJson.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(jsonOutput.textContent);
+                copyJson.textContent = '已复制!';
+                setTimeout(() => {
+                    copyJson.textContent = '复制 JSON';
+                }, 2000);
+            } catch (err) {
+                const textArea = document.createElement('textarea');
+                textArea.value = jsonOutput.textContent;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                copyJson.textContent = '已复制!';
+                setTimeout(() => {
+                    copyJson.textContent = '复制 JSON';
+                }, 2000);
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            errorMessage.style.background = '#fee2e2';
+            errorMessage.style.color = '#dc2626';
+        }
+
+        function showSuccess(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            errorMessage.style.background = '#d1fae5';
+            errorMessage.style.color = '#059669';
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+
+        downloadJsonBtn.addEventListener('click', () => {
+            if (!currentResult || !currentResult.document) return;
+            const jsonStr = JSON.stringify(currentResult.document, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const jsonFilename = (currentResult.filename || 'document').replace(/\.[^/.]+$/, '') + '.json';
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = jsonFilename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadUrl);
+            a.remove();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Docling API 服务依赖
+
+# Web 框架
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
+# 文件处理
+python-multipart>=0.0.6
+
+# Docling 核心（如果从 docling 项目外运行，需要安装）
+# docling>=2.70.0
