@@ -439,3 +439,6 @@ pip-selfcheck.json
 # Docs
 # docs/**/*.png
 # docs/**/*.svg
+
+# Docling API 后台启动日志（scripts/start-docling-api.sh background）
+.logs/
