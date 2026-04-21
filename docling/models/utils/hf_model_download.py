@@ -12,13 +12,9 @@ def download_hf_model(
     progress: bool = False,
     revision: Optional[str] = None,
 ) -> Path:
-    import os
     from huggingface_hub import snapshot_download
     from huggingface_hub.utils import disable_progress_bars
 
-    # 强制使用 HuggingFace 镜像源（国内加速）
-    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
-    
     if not progress:
         disable_progress_bars()
     download_path = snapshot_download(

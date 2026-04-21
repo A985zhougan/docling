@@ -452,12 +452,8 @@
     const formData = new FormData();
     formData.append('file', selectedFile);
 
-    // 智能检测后端地址：
-    // 1. 如果前端在 8001，后端在同 host 的 8000
-    // 2. 否则使用当前 host（生产环境前后端同端口）
-    const apiBase = location.port === '8001' 
-      ? `${location.protocol}//${location.hostname}:8000` 
-      : '';
+    // 静态页与 /api 均由 FastAPI 提供（见 start-docling-api.sh，默认 8001），须同源避免 CORS
+    const apiBase = '';
     
     const res = await fetch(`${apiBase}/api/health-report/from-pdf?ai_provider=openai&ai_base_url=https://api.deepseek.com/v1`, {
       method: 'POST',

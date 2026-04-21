@@ -23,11 +23,10 @@ def _load_local_env_files() -> None:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("env_loader")
     
-    # 🔥 优先设置 HuggingFace 镜像，必须在任何 import docling/transformers 之前
-    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    # 仅设置本地缓存目录；HF_ENDPOINT 由 .env/.env.local 显式控制，不做强制默认
     os.environ.setdefault("TRANSFORMERS_CACHE", str(Path.home() / ".cache/huggingface/transformers"))
     os.environ.setdefault("HF_HOME", str(Path.home() / ".cache/huggingface"))
-    logger.info(f"🌍 HuggingFace endpoint: {os.environ.get('HF_ENDPOINT')}")
+    logger.info(f"🌍 HuggingFace endpoint: {os.environ.get('HF_ENDPOINT', '(default huggingface.co)')}")
     
     try:
         from dotenv import load_dotenv
@@ -55,7 +54,7 @@ def _load_local_env_files() -> None:
 
 _load_local_env_files()
 
-# ⚠️ 必须在设置 HF_ENDPOINT 之后再 import docling
+# ⚠️ 必须在环境变量加载后再 import docling
 from docling.document_converter import DocumentConverter
 from docling.datamodel.base_models import InputFormat, ConversionStatus
 
