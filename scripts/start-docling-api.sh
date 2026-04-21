@@ -14,6 +14,10 @@ HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8001}"
 MODE="${1:-foreground}"
 
+# DeepSeek API Key（OpenAI 兼容接口）
+# 如需在服务器上覆盖，可在启动前 export OPENAI_API_KEY=你的key
+export OPENAI_API_KEY="sk-ce0dadd93bc7446aa976b9ed9124bbd1"
+
 VENV_PY="${ROOT}/.venv/bin/python"
 if [[ ! -x "$VENV_PY" ]]; then
   echo "错误：未找到可执行虚拟环境 ${VENV_PY}" >&2

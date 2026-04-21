@@ -180,13 +180,13 @@ def call_openai_compatible_structure(
 
 
 def resolve_provider(provider: Optional[str]) -> str:
-    raw = (provider or os.environ.get("HEALTH_REPORT_AI_PROVIDER") or "anthropic").strip()
+    raw = (provider or os.environ.get("HEALTH_REPORT_AI_PROVIDER") or "openai").strip()
     low = raw.lower()
     if low in ("anthropic", "claude"):
         return "anthropic"
     if low in ("openai", "openai_compatible", "compat", "compatible"):
         return "openai"
-    return "anthropic"
+    return "openai"
 
 
 def call_structure(
@@ -210,12 +210,12 @@ def call_structure(
 def default_model(provider: Optional[str] = None) -> str:
     p = resolve_provider(provider)
     if p == "openai":
-        return os.environ.get("PET_REPORT_OPENAI_MODEL", "gpt-4.1-mini")
+        return os.environ.get("PET_REPORT_OPENAI_MODEL", "deepseek-chat")
     return os.environ.get("PET_REPORT_ANTHROPIC_MODEL", "claude-sonnet-4-5")
 
 
 def default_base_url(provider: Optional[str] = None) -> Optional[str]:
     p = resolve_provider(provider)
     if p == "openai":
-        return _normalize_base_url(os.environ.get("OPENAI_BASE_URL"))
+        return _normalize_base_url(os.environ.get("OPENAI_BASE_URL", "https://api.deepseek.com"))
     return _normalize_base_url(os.environ.get("ANTHROPIC_BASE_URL"))
