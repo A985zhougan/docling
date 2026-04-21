@@ -15,12 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 
-from docling.document_converter import DocumentConverter
-from docling.datamodel.base_models import InputFormat, ConversionStatus
-
-from api.health_report.runner import run_health_report_from_pdf
-from api.pet_report.pipeline import render_pet_report
-
 
 def _load_local_env_files() -> None:
     """自动加载项目内 .env / .env.local，避免每次手工 export。"""
@@ -28,6 +22,12 @@ def _load_local_env_files() -> None:
     import logging
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("env_loader")
+    
+    # 🔥 优先设置 HuggingFace 镜像，必须在任何 import docling/transformers 之前
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(Path.home() / ".cache/huggingface/transformers"))
+    os.environ.setdefault("HF_HOME", str(Path.home() / ".cache/huggingface"))
+    logger.info(f"🌍 HuggingFace endpoint: {os.environ.get('HF_ENDPOINT')}")
     
     try:
         from dotenv import load_dotenv
@@ -54,6 +54,13 @@ def _load_local_env_files() -> None:
 
 
 _load_local_env_files()
+
+# ⚠️ 必须在设置 HF_ENDPOINT 之后再 import docling
+from docling.document_converter import DocumentConverter
+from docling.datamodel.base_models import InputFormat, ConversionStatus
+
+from api.health_report.runner import run_health_report_from_pdf
+from api.pet_report.pipeline import render_pet_report
 
 app = FastAPI(
     title="Docling API",

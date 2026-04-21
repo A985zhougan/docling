@@ -452,7 +452,14 @@
     const formData = new FormData();
     formData.append('file', selectedFile);
 
-    const res = await fetch('/api/health-report/from-pdf', {
+    // 智能检测后端地址：
+    // 1. 如果前端在 8001，后端在同 host 的 8000
+    // 2. 否则使用当前 host（生产环境前后端同端口）
+    const apiBase = location.port === '8001' 
+      ? `${location.protocol}//${location.hostname}:8000` 
+      : '';
+    
+    const res = await fetch(`${apiBase}/api/health-report/from-pdf?ai_provider=openai&ai_base_url=https://api.deepseek.com/v1`, {
       method: 'POST',
       body: formData
     });
@@ -473,6 +480,8 @@
       <div><strong>文件：</strong>${meta.filename || '-'}</div>
       <div><strong>Markdown 字符数：</strong>${meta.markdown_chars ?? '-'}</div>
       <div><strong>是否截断：</strong>${meta.markdown_truncated ? '是' : '否'}</div>
+      <div><strong>Provider：</strong>${meta.provider || '-'}</div>
+      <div><strong>Model：</strong>${meta.model || '-'}</div>
       <div><strong>Input Tokens：</strong>${meta.usage?.input_tokens ?? '-'}</div>
       <div><strong>Output Tokens：</strong>${meta.usage?.output_tokens ?? '-'}</div>
     `;
