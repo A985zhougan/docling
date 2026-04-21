@@ -7,16 +7,53 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 
 from docling.document_converter import DocumentConverter
 from docling.datamodel.base_models import InputFormat, ConversionStatus
+
+from api.health_report.runner import run_health_report_from_pdf
+from api.pet_report.pipeline import render_pet_report
+
+
+def _load_local_env_files() -> None:
+    """自动加载项目内 .env / .env.local，避免每次手工 export。"""
+    import os
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("env_loader")
+    
+    try:
+        from dotenv import load_dotenv
+    except Exception as e:
+        logger.error(f"❌ dotenv import failed: {e}")
+        return
+    
+    root = Path(__file__).resolve().parents[1]
+    logger.info(f"📁 Project root: {root}")
+    
+    for name in (".env", ".env.local"):
+        env_path = root / name
+        logger.info(f"🔍 Checking {env_path} ... exists={env_path.exists()}")
+        if env_path.exists():
+            load_dotenv(env_path, override=True)
+            logger.info(f"✅ Loaded {name}")
+    
+    # 代理商可能使用 ANTHROPIC_AUTH_TOKEN 而非标准的 ANTHROPIC_API_KEY
+    key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ""
+    if key:
+        logger.info(f"🔑 API key loaded: {key[:15]}... (source: {'ANTHROPIC_API_KEY' if os.environ.get('ANTHROPIC_API_KEY') else 'ANTHROPIC_AUTH_TOKEN'})")
+    else:
+        logger.warning("⚠️ No ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN found!")
+
+
+_load_local_env_files()
 
 app = FastAPI(
     title="Docling API",
@@ -209,6 +246,107 @@ async def convert_to_markdown(file: UploadFile = File(...)):
 async def health_check():
     """健康检查接口"""
     return {"status": "ok", "service": "docling-api"}
+
+
+@app.post("/api/pet-report/render")
+async def pet_report_render(
+    use_ai: bool = Query(False, description="是否调用 Anthropic 生成「AI 补充说明」"),
+    x_anthropic_api_key: Optional[str] = Header(None, alias="X-Anthropic-Api-Key"),
+    x_anthropic_base_url: Optional[str] = Header(None, alias="X-Anthropic-Base-URL"),
+    anthropic_api_key: Optional[str] = Query(None, description="可选；默认读取环境变量 ANTHROPIC_API_KEY"),
+    anthropic_base_url: Optional[str] = Query(None, description="可选；默认读取环境变量 ANTHROPIC_BASE_URL"),
+    anthropic_model: Optional[str] = Query(None, description="可选；覆盖 PET_REPORT_ANTHROPIC_MODEL"),
+    payload: Dict[str, Any] = Body(..., description="与 cankao.json 结构一致的报告 JSON 对象"),
+):
+    """规则层渲染完整 HTML；可选叠加 Claude 短文案。"""
+    import json as _json
+    try:
+        raw = _json.dumps(payload, ensure_ascii=False)
+        key = x_anthropic_api_key or anthropic_api_key
+        base_url = x_anthropic_base_url or anthropic_base_url
+        result = render_pet_report(
+            raw,
+            use_ai=use_ai,
+            api_key=key,
+            base_url=base_url,
+            model=anthropic_model,
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/pet-report/render-file")
+async def pet_report_render_file(
+    file: UploadFile = File(..., description="原始 .json 文件（可含 // 或 /**/ 注释）"),
+    use_ai: bool = Query(False),
+    x_anthropic_api_key: Optional[str] = Header(None, alias="X-Anthropic-Api-Key"),
+    x_anthropic_base_url: Optional[str] = Header(None, alias="X-Anthropic-Base-URL"),
+    anthropic_api_key: Optional[str] = Query(None),
+    anthropic_base_url: Optional[str] = Query(None),
+    anthropic_model: Optional[str] = Query(None),
+):
+    """上传 JSON 文件（支持带注释），渲染报告 HTML。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    try:
+        raw_bytes = await file.read()
+        raw = raw_bytes.decode("utf-8")
+        key = x_anthropic_api_key or anthropic_api_key
+        base_url = x_anthropic_base_url or anthropic_base_url
+        result = render_pet_report(
+            raw,
+            use_ai=use_ai,
+            api_key=key,
+            base_url=base_url,
+            model=anthropic_model,
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/health-report/from-pdf")
+async def health_report_from_pdf(
+    file: UploadFile = File(..., description="PDF 文件"),
+    ai_provider: Optional[str] = Query(
+        None,
+        description="AI 提供方：anthropic 或 openai；不传则使用服务端 HEALTH_REPORT_AI_PROVIDER",
+    ),
+    ai_model: Optional[str] = Query(None, description="模型名，未传时使用环境变量默认值"),
+    ai_api_key: Optional[str] = Query(None, description="可选；也可通过 Header X-AI-Api-Key 传入"),
+    ai_base_url: Optional[str] = Query(None, description="可选；订阅链接 / 网关地址"),
+    anthropic_api_key: Optional[str] = Query(None, description="兼容旧参数，等价于 ai_api_key"),
+    anthropic_base_url: Optional[str] = Query(None, description="兼容旧参数，等价于 ai_base_url"),
+    x_ai_api_key: Optional[str] = Header(None, alias="X-AI-Api-Key"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-URL"),
+    x_anthropic_api_key: Optional[str] = Header(None, alias="X-Anthropic-Api-Key"),
+):
+    """上传 PDF → Docling 转 Markdown → AI 结构化 → 渲染 HTML 报告。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    ext = Path(file.filename).suffix.lower()
+    if ext != ".pdf":
+        raise HTTPException(status_code=400, detail="仅支持 .pdf 文件")
+    try:
+        data = await file.read()
+        key = x_ai_api_key or ai_api_key or x_anthropic_api_key or anthropic_api_key
+        base_url = x_ai_base_url or ai_base_url or anthropic_base_url
+        out = run_health_report_from_pdf(
+            data,
+            file.filename,
+            api_key=key,
+            provider=ai_provider,
+            base_url=base_url,
+            model=ai_model,
+        )
+        return {"success": True, **out}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

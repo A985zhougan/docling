@@ -95,6 +95,44 @@ GET /api/formats
 GET /api/health
 ```
 
+### PDF 生成 AI 解读报告（推荐）
+
+```bash
+POST /api/health-report/from-pdf
+```
+
+这个接口会执行完整链路：`PDF -> Markdown -> AI 结构化 -> HTML 报告`，并返回：
+
+- `html`：可直接打开/下载的 AI 报告页面
+- `structured`：结构化 JSON（便于落库）
+- `meta`：provider、model、token 用量等调用信息
+
+可选参数（Query/Header）：
+
+- `ai_provider`：`anthropic`（默认）或 `openai`
+- `ai_model`：模型名（不传则按 provider 使用默认模型）
+- `ai_api_key` / `X-AI-Api-Key`：API Key
+- `ai_base_url` / `X-AI-Base-URL`：订阅链接 / 网关 Base URL
+
+兼容旧参数：`anthropic_model`、`anthropic_api_key`、`X-Anthropic-Api-Key`、`anthropic_base_url` 依然可用。
+
+示例（Anthropic 官方/兼容网关）：
+
+```bash
+curl -X POST "http://localhost:8000/api/health-report/from-pdf?ai_provider=anthropic&ai_model=claude-sonnet-4-5" \
+  -H "X-AI-Api-Key: $ANTHROPIC_API_KEY" \
+  -F "file=@health_report.pdf"
+```
+
+示例（OpenAI 兼容订阅链接）：
+
+```bash
+curl -X POST "http://localhost:8000/api/health-report/from-pdf?ai_provider=openai&ai_model=gpt-4.1-mini" \
+  -H "X-AI-Api-Key: $OPENAI_API_KEY" \
+  -H "X-AI-Base-URL: https://your-gateway.example.com/v1" \
+  -F "file=@health_report.pdf"
+```
+
 ## 支持的文件格式
 
 | 格式 | 扩展名 |
