@@ -81,8 +81,19 @@
     }
     .btn-primary { color: white; background: linear-gradient(135deg, #4f46e5, #7c3aed); }
     .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
-    .loading { display: none; text-align: center; padding: 24px 0; color: #6b7280; }
+    .loading { display: none; text-align: center; padding: 28px 0 20px; }
     .loading.show { display: block; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-stage { font-size: 14px; color: #374151; font-weight: 500; margin-bottom: 4px; }
+    .loading-timer { font-size: 12px; color: #9ca3af; }
     .error-message {
       display: none;
       margin-top: 16px;
@@ -179,7 +190,11 @@
         <button class="btn btn-primary" id="convertBtn" disabled>开始处理</button>
       </div>
 
-      <div class="loading" id="loading">处理中，请稍候...</div>
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-stage" id="loadingStage">处理中，请稍候...</div>
+        <div class="loading-timer" id="loadingTimer"></div>
+      </div>
       <div class="error-message" id="errorMessage"></div>
     </div>
 
@@ -236,6 +251,39 @@
   const downloadFile = document.getElementById('downloadFile');
   const convertOptions = document.getElementById('convertOptions');
   const loading = document.getElementById('loading');
+  const loadingStage = document.getElementById('loadingStage');
+  const loadingTimer = document.getElementById('loadingTimer');
+
+  const AI_STAGES = [
+    { at: 0,  text: '正在解析 PDF 文档...' },
+    { at: 8,  text: '正在提取文档内容...' },
+    { at: 18, text: '正在调用 AI 分析报告...' },
+    { at: 35, text: 'AI 正在理解检测数据...' },
+    { at: 55, text: 'AI 正在生成结构化报告...' },
+    { at: 75, text: '正在渲染报告页面...' },
+  ];
+  let _timerInterval = null;
+
+  function startLoading(isAi) {
+    loading.classList.add('show');
+    const stages = isAi ? AI_STAGES : [{ at: 0, text: '正在转换文档...' }];
+    const start = Date.now();
+    loadingStage.textContent = stages[0].text;
+    loadingTimer.textContent = '';
+    clearInterval(_timerInterval);
+    _timerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const stage = [...stages].reverse().find(s => elapsed >= s.at);
+      if (stage) loadingStage.textContent = stage.text;
+      loadingTimer.textContent = `已等待 ${elapsed} 秒`;
+    }, 500);
+  }
+
+  function stopLoading() {
+    clearInterval(_timerInterval);
+    _timerInterval = null;
+    loading.classList.remove('show');
+  }
   const resultSection = document.getElementById('resultSection');
   const resultTabs = document.getElementById('resultTabs');
   const jsonOutput = document.getElementById('jsonOutput');
@@ -462,7 +510,7 @@
   convertBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
     hideError();
-    loading.classList.add('show');
+    startLoading(mode === 'ai-report');
     convertBtn.disabled = true;
     resultSection.classList.remove('show');
     try {
@@ -474,7 +522,7 @@
     } catch (e) {
       showError(e.message || '处理失败');
     } finally {
-      loading.classList.remove('show');
+      stopLoading();
       convertBtn.disabled = false;
     }
   });
