@@ -454,14 +454,37 @@
 
     // 静态页与 /api 均由 FastAPI 提供（见 start-docling-api.sh，默认 8001），须同源避免 CORS
     const apiBase = '';
-    
+
+    // 异步任务 + 轮询：POST 立即返回 202，避免云 LB ~60s 断开导致 net::ERR_CONNECTION_RESET
     const res = await fetch(`${apiBase}/api/health-report/from-pdf?ai_provider=openai&ai_base_url=https://api.deepseek.com/v1`, {
       method: 'POST',
       body: formData
     });
+    const start = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(start.detail || '提交 AI 报告任务失败');
+    if (res.status !== 202 || !start.job_id) {
+      throw new Error('服务端未返回任务 ID，请刷新页面后重试');
+    }
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'AI 报告生成失败');
+    const jobId = start.job_id;
+    const pollMs = 1500;
+    const maxWaitMs = 15 * 60 * 1000;
+    const t0 = Date.now();
+    let data = null;
+    while (Date.now() - t0 < maxWaitMs) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      const pr = await fetch(`${apiBase}/api/health-report/jobs/${jobId}`);
+      const st = await pr.json().catch(() => ({}));
+      if (!pr.ok) throw new Error(st.detail || '查询任务状态失败');
+      if (st.status === 'done' && st.html !== undefined) {
+        data = st;
+        break;
+      }
+      if (st.status === 'error') {
+        throw new Error(st.detail || 'AI 报告生成失败');
+      }
+    }
+    if (!data) throw new Error('处理超时，请稍后重试或换较小 PDF');
 
     const reportHtml = data.html || '';
     if (!reportHtml.trim()) throw new Error('AI 报告为空，请重试。');

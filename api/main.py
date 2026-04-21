@@ -6,11 +6,14 @@ Docling API 服务
 import json
 import tempfile
 import shutil
+import threading
+import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Body, Header
+from fastapi import BackgroundTasks, FastAPI, File, UploadFile, HTTPException, Query, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
@@ -60,6 +63,20 @@ from docling.datamodel.base_models import InputFormat, ConversionStatus
 
 from api.health_report.runner import run_health_report_from_pdf
 from api.pet_report.pipeline import render_pet_report
+
+# AI 健康报告异步任务（避免云 LB / 网关 ~60s 空闲断开导致 net::ERR_CONNECTION_RESET）
+_HEALTH_JOB_MAX = 64
+_health_jobs_lock = threading.Lock()
+_health_jobs: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+
+
+def _health_job_put(job_id: str, payload: Dict[str, Any]) -> None:
+    with _health_jobs_lock:
+        _health_jobs[job_id] = payload
+        _health_jobs.move_to_end(job_id)
+        while len(_health_jobs) > _HEALTH_JOB_MAX:
+            _health_jobs.popitem(last=False)
+
 
 app = FastAPI(
     title="Docling API",
@@ -314,6 +331,7 @@ async def pet_report_render_file(
 
 @app.post("/api/health-report/from-pdf")
 async def health_report_from_pdf(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="PDF 文件"),
     ai_provider: Optional[str] = Query(
         None,
@@ -328,31 +346,60 @@ async def health_report_from_pdf(
     x_ai_base_url: Optional[str] = Header(None, alias="X-AI-Base-URL"),
     x_anthropic_api_key: Optional[str] = Header(None, alias="X-Anthropic-Api-Key"),
 ):
-    """上传 PDF → Docling 转 Markdown → AI 结构化 → 渲染 HTML 报告。"""
+    """上传 PDF → Docling 转 Markdown → AI 结构化 → 渲染 HTML 报告（异步：立即 202，避免长耗时被 LB 断开）。"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
     ext = Path(file.filename).suffix.lower()
     if ext != ".pdf":
         raise HTTPException(status_code=400, detail="仅支持 .pdf 文件")
-    try:
-        data = await file.read()
-        key = x_ai_api_key or ai_api_key or x_anthropic_api_key or anthropic_api_key
-        base_url = x_ai_base_url or ai_base_url or anthropic_base_url
-        out = run_health_report_from_pdf(
-            data,
-            file.filename,
-            api_key=key,
-            provider=ai_provider,
-            base_url=base_url,
-            model=ai_model,
-        )
-        return {"success": True, **out}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    fname = file.filename
+    data = await file.read()
+    key = x_ai_api_key or ai_api_key or x_anthropic_api_key or anthropic_api_key
+    base_url = x_ai_base_url or ai_base_url or anthropic_base_url
+
+    job_id = str(uuid.uuid4())
+
+    def _run_job() -> None:
+        try:
+            _health_job_put(job_id, {"status": "running"})
+            out = run_health_report_from_pdf(
+                data,
+                fname,
+                api_key=key,
+                provider=ai_provider,
+                base_url=base_url,
+                model=ai_model,
+            )
+            _health_job_put(job_id, {"status": "done", "success": True, **out})
+        except ValueError as e:
+            _health_job_put(job_id, {"status": "error", "detail": str(e), "code": 400})
+        except RuntimeError as e:
+            _health_job_put(job_id, {"status": "error", "detail": str(e), "code": 502})
+        except Exception as e:
+            _health_job_put(job_id, {"status": "error", "detail": str(e), "code": 500})
+
+    _health_job_put(job_id, {"status": "queued"})
+    background_tasks.add_task(_run_job)
+    return JSONResponse(
+        status_code=202,
+        content={
+            "success": True,
+            "job_id": job_id,
+            "status": "queued",
+            "poll_url": f"/api/health-report/jobs/{job_id}",
+        },
+    )
+
+
+@app.get("/api/health-report/jobs/{job_id}")
+async def health_report_job_status(job_id: str) -> Dict[str, Any]:
+    """轮询异步健康报告任务状态；完成后 payload 与原先同步接口一致。"""
+    with _health_jobs_lock:
+        job = _health_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    return job
 
 
 if __name__ == "__main__":
